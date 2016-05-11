@@ -1,0 +1,24 @@
+'*****************************************************************************************
+'  Clone Layout Tool
+'  Copyright 2007 Erin Comparri
+'***************************************************************************************** 
+
+Include "mapbasic.def"
+Include "menu.def"
+Include "icons.def"
+
+
+Declare Sub Main
+
+
+Sub Main
+Dim i_map_id as integer
+Dim LayoutTitle as String
+
+LayoutTitle = "Copy of "
+i_map_id = FrontWindow()
+LayoutTitle = LayoutTitle + WindowInfo (i_map_id, WIN_INFO_NAME) 
+Run Command  WindowInfo(i_map_id, WIN_INFO_CLONEWINDOW)
+Set Window FrontWindow()
+          Title LayoutTitle
+End Sub

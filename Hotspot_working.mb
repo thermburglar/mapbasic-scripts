@@ -1,0 +1,522 @@
+'**************
+' Hotspot Calculator 
+' A few tools that help with the preparation of hotspot maps
+' Copyright (right!) 2006 Erin Comparri
+' 24 August 2006
+'**************
+
+Include "mapbasic.def"
+Include "icons.def"
+
+Declare Sub Main
+Declare Sub table_prep
+Declare Sub table_alt
+Declare Sub calc_start
+Declare Sub calc_dialog
+Declare Sub verify
+Declare Sub change
+Declare Sub values_reader
+Declare Sub median_finder
+Declare Sub final_score
+
+Dim Table_ID as Integer
+Dim Table_name as String
+Dim Columns() as Integer
+Dim Weights() as Float
+Dim MedAlias() as String
+
+
+'********** MAIN - Adds HotSpot Tools into the 'Tools' Menu ****************** 
+
+sub Main
+ Create Menu "HotSpot" As
+ 	"Change polygons to points" Calling table_prep,
+   "HotSpot Calculator" Calling calc_start
+  
+ Alter menu "Tools" Add "HotSpot Tools" As "HotSpot"
+end Sub
+
+'********** TABLE_PREP - Check that the window selected is a table and verify name ****************** 
+
+sub table_prep
+   
+  If Not FrontWindow() Then
+		Note "You must have a table active."
+		'Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_BROWSER Then
+		Note "You must have a table active."
+		'Alter Button ID 1001 Uncheck
+		Exit Sub
+	Else
+		Table_ID = FrontWindow()
+		Table_name = WindowInfo(Table_ID, WIN_INFO_TABLE)	
+       Dialog 
+			Title "Table name check"
+			Control StaticText 
+				Title "Is " + Table_name + " the grid table to alter?" 
+			Control OKButton
+				Calling table_alt
+			Control CancelButton
+  End If
+end Sub
+
+'********** TABLE_ALT - Alter the table with lat/long coords, then erase polygons and add points ****************** 
+
+sub table_alt
+
+ Dim i, j, AddCol as SmallInt
+ Dim SymbolSave as Symbol
+ Dim sSymbolAttr, sCmd, ColNum as String
+  
+  '* Store the current style so we can restore it later
+  symbolSave = CurrentSymbol() 
+
+  '* Set a new "current symbol style" 
+  sSymbolAttr = "(34,000000,8)"
+  sCmd = "Set Style Symbol MakeSymbol" + sSymbolAttr
+  Run Command sCmd
+  Commit Table Table_name
+ 
+  '* Check to see if table alredy has Lat and Long as column names
+  i= TableInfo(Table_name, TAB_INFO_NCOLS)
+  AddCol= 0
+  For j= 1 to i
+   ColNum = "Col" + j
+   If ColumnInfo(Table_name, ColNum, COL_INFO_NAME) = "Lat" Then
+		AddCol= AddCol + 1
+   End If
+  Next
+  For j = 1 to i
+   ColNum = "Col" + j
+   If ColumnInfo(Table_name, ColNum, COL_INFO_NAME) = "Long" Then
+		AddCol= AddCol + 2
+   End If
+  Next
+ 
+  If AddCol = 0 Then
+    Alter Table Table_name ( add Lat Float,Long Float ) Interactive
+    Commit Table Table_name
+  ElseIf AddCol = 1 Then
+    Alter Table Table_name ( add Long Float ) Interactive
+    Commit Table Table_name
+  ElseIf AddCol = 2 Then
+    Alter Table Table_name ( add Lat Float ) Interactive
+    Commit Table Table_name
+  End If
+  
+  '*Update the lat and long columns in the table
+  Update Table_name Set Lat= CentroidY(obj), Long= CentroidX(obj)
+  Commit Table Table_name
+
+  '*Delete polygons and create centroid points
+  Delete Object From Table_name
+  Update Table_name Set Obj= CreatePoint(Long, Lat)
+  Commit Table Table_name
+
+  ' restore the original "current symbol style" 
+  Set Style Symbol symbolSave 
+end Sub
+
+'********** CALC_START - Check that the window selected is a table and verify name ******************
+
+sub calc_start
+
+   If Not FrontWindow() Then
+		Note "You must have a table active."
+		'Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_BROWSER Then
+		Note "You must have a table active."
+		'Alter Button ID 1001 Uncheck
+		Exit Sub
+	Else
+		Table_ID = FrontWindow()
+		Table_name = WindowInfo(Table_ID, WIN_INFO_TABLE)	
+       Dialog 
+			Title "Table name check"
+			Control StaticText 
+				Title "Is " + Table_name + " the grid table to calculate on?" 
+			Control OKButton
+				Calling calc_dialog
+			Control CancelButton
+	End If
+end Sub
+
+'********** CALC_DIALOG - Dialog that collects user info about the calculations to be performed ******************
+
+sub calc_dialog
+
+ Dim ColumnNames(), ColNum as String
+ Dim i, j as Integer
+ 
+  '* Populate ColumnName array with names of columns
+  i= TableInfo(Table_name, TAB_INFO_NCOLS)
+  ReDim ColumnNames(i+1)
+  ColumnNames(1) = "(None)"
+  For j = 1 to i
+    ColNum = "Col" + j
+    ColumnNames(j+1) = ColumnInfo(Table_name, ColNum, COL_INFO_NAME)
+  Next
+
+
+  '* Calculator Dialog
+  Dialog
+    Title "HotSpot Calculator"
+    Width 200
+    'Height 300
+  Control StaticText
+    Title "Choose the column and weight for each variable."
+ '1 
+  Control PopupMenu
+    Width 100
+    Position 20, 20
+    Title From Variable ColumnNames
+    ID 6000
+  Control EditText
+    Position 124, 20 Width 50
+    ID 6001
+    Value "0.00"
+
+ '2 
+  Control PopupMenu
+    Width 100
+    Position 20, 38
+    Title From Variable ColumnNames
+    ID 6002
+  Control EditText
+    Width 50
+    Position 124, 38
+    Value "0.00"
+    ID 6003
+
+ '3 
+  Control PopupMenu
+    Width 100
+    Position 20, 56
+    Title From Variable ColumnNames
+    ID 6004
+  Control EditText
+    Width 50
+    Position 124, 56
+    Value "0.00"
+    ID 6005
+ '4
+  Control PopupMenu
+    Width 100
+    Position 20, 74
+    Title From Variable ColumnNames
+    ID 6006 
+  Control EditText
+    Width 50
+    Position 124, 74
+    Value "0.00"
+    ID 6007
+ '5
+  Control PopupMenu
+    Width 100
+    Position 20, 92
+    Title From Variable ColumnNames
+    ID 6008
+  Control EditText
+    Width 50
+    Position 124, 92
+    Value "0.00"
+    ID 6009
+
+ '6
+  Control PopupMenu
+    Width 100
+    Position 20, 110
+    Title From Variable ColumnNames
+    ID 6010
+  Control EditText
+    Width 50
+    Position 124, 110
+    Value "0.00"
+    ID 6011
+
+ '7
+  Control PopupMenu
+    Width 100
+    Position 20, 128
+    Title From Variable ColumnNames
+    ID 6012
+  Control EditText
+    Width 50
+    Position 124, 128
+    Value "0.00"
+    ID 6013
+
+ '8
+  Control PopupMenu
+    Width 100
+    Position 20, 146
+    Title From Variable ColumnNames
+    ID 6014
+  Control EditText
+    Width 50
+    Position 124, 146
+    Value "0.00"
+    ID 6015
+
+ '9
+  Control PopupMenu
+    Width 100
+    Position 20, 164
+    Title From Variable ColumnNames
+    ID 6016
+  Control EditText
+    Width 50
+    Position 124, 164
+    Value "0.00"
+    ID 6017
+
+ '10 
+  Control PopupMenu
+    Width 100
+    Position 20, 182
+    Title From Variable ColumnNames
+    ID 6018
+  Control EditText
+    Width 50
+    Position 124, 182
+    Value "0.00"
+    ID 6019
+
+ 'the rest
+  Control StaticText
+    Width 50
+    Position 124, 192
+    Title "_________"
+  Control StaticText
+    Width 50
+    Position 126, 200
+    Title "0.00"
+    ID 6020
+  Control Button
+    Position 90, 218
+    Title "Verify"
+    ID 6021
+    Calling verify
+  Control Button
+    Position 90, 218
+    Title "Change"
+    ID 6022
+    Calling change
+    Hide 
+  Control OKButton
+    Position 135, 218
+    ID 6023
+    Calling values_reader
+    Disable
+
+ ReDim ColumnNames(0)
+end Sub
+
+'********** VERIFY - Check that the weights add to one, and then allow the user to continue ******************
+
+Sub verify
+  
+ Dim NewSum as Float
+ Dim NewTitle as String
+
+  NewSum = Val(ReadControlValue(6001)) + Val(ReadControlValue(6003)) + Val(ReadControlValue(6005)) + Val(ReadControlValue(6007)) + Val(ReadControlValue(6009)) + Val(ReadControlValue(6011)) + Val(ReadControlValue(6013)) + Val(ReadControlValue(6015)) + Val(ReadControlValue(6017)) + Val(ReadControlValue(6019))
+  NewTitle = Format$(NewSum, "##.##") 
+  Alter Control 6020
+    Title NewTitle
+
+  '* If the new sum is 1.00, then disable the input boxes to prevent changes, and allow the user to continue.
+  '* Otherwise, do nothing.
+  If NewSum = 1.00 Then
+    Alter Control 6000 Disable
+    Alter Control 6001 Disable
+    Alter Control 6002 Disable 
+    Alter Control 6003 Disable
+    Alter Control 6004 Disable
+    Alter Control 6005 Disable
+    Alter Control 6006 Disable
+    Alter Control 6007 Disable
+
+    Alter Control 6008 Disable
+    Alter Control 6009 Disable
+    Alter Control 6010 Disable
+    Alter Control 6011 Disable
+	 Alter Control 6012 Disable
+	 Alter Control 6013 Disable
+	 Alter Control 6014 Disable
+	 Alter Control 6015 Disable
+	 Alter Control 6016 Disable
+	 Alter Control 6017 Disable
+	 Alter Control 6018 Disable
+	 Alter Control 6019 Disable
+
+	 Alter Control 6021 Hide
+	 Alter Control 6023 Enable
+	 Alter Control 6022 Show
+  End If
+End Sub
+
+'********** CHANGE - Reactivates the input controls to allow the user to make changes ******************
+
+Sub change
+  
+  Alter Control 6000 Enable
+  Alter Control 6001 Enable
+  Alter Control 6002 Enable 
+  Alter Control 6003 Enable
+  Alter Control 6004 Enable
+  Alter Control 6005 Enable
+  Alter Control 6006 Enable
+  Alter Control 6007 Enable
+  Alter Control 6008 Enable
+  Alter Control 6009 Enable
+  Alter Control 6010 Enable
+  Alter Control 6011 Enable
+  Alter Control 6012 Enable
+  Alter Control 6013 Enable
+  Alter Control 6014 Enable
+  Alter Control 6015 Enable
+  Alter Control 6016 Enable
+  Alter Control 6017 Enable
+  Alter Control 6018 Enable
+  Alter Control 6019 Enable
+
+  Alter Control 6022 Hide
+  Alter Control 6023 Disable
+  Alter Control 6021 Show
+End Sub
+
+'********** VALUES_READER - Stores the values for the column numbers and weights ******************
+
+Sub values_reader
+
+ Dim ControlNum, WeightNum, j, Col, y as Integer
+ Dim Weight as Float
+  
+  ControlNum = 5998
+  WeightNum = 5999
+  y = 1
+  For j = 1 to 10
+    ControlNum = ControlNum + 2
+    WeightNum = WeightNum + 2
+    Col = ReadControlValue(ControlNum) - 1
+    If Col = 0 Then
+    Else
+      Weight = Val(ReadControlValue(WeightNum))
+      ReDim Columns(y)
+      ReDim Weights(y)
+      Columns(y) = Col
+      Weights(y) = Weight
+      y = y+1
+    End If
+  Next
+  Call median_finder
+End Sub
+
+'********** MEDIAN_FINDER - For each chosen column, finds the median, creates a new column, and then updates with the column values/median ******************
+
+Sub median_finder
+
+ Dim median as Float
+ Dim Array_size, j, Col, n, mid, y as Integer
+ Dim ColNum, Name, NewCol, med_str, RunStr as String
+ Dim SelAlias, COLAlias as Alias 
+   
+  y = 1
+  '* Check to see that columns were chosen.
+  Array_size = UBound(Columns)
+  If Array_size = 0 Then
+    Note "No Columns were selected."
+    Exit Sub
+  End If
+  
+    n = TableInfo(Table_name, TAB_INFO_NROWS)
+    mid = Int(Round((n + 1)/2,1))
+    Commit Table Table_name
+
+  For j = 1 to Array_size
+    Col = Columns(j)
+    ColNum = "COL" + Col
+
+    '* Check that the column stores numerical values
+    If ColumnInfo(Table_name, ColNum, COL_INFO_TYPE) = COL_TYPE_CHAR Then
+      Note "A Text Column was chosen. Calculation halted."
+      Exit Sub
+    ElseIf ColumnInfo(Table_name, ColNum, COL_INFO_TYPE) = COL_TYPE_DATE Then
+      Note "A Date Column was chosen. Calculation halted."
+      Exit Sub
+    ElseIf ColumnInfo(Table_name, ColNum, COL_INFO_TYPE) = COL_TYPE_LOGICAL Then
+      Note "A True/False Column was chosen. Calculation halted."
+      Exit Sub
+    Else
+    End If
+    
+   
+    SelAlias = "Selection." + ColNum
+    COLAlias = Table_name + "." + ColNum
+    Name = ColumnInfo(Table_name, ColNum, COL_INFO_NAME)	
+    NewCol = Name + "_Score"
+    
+    '* Sort on the column in descending order
+    Select * from Table_name Order by ColNum Desc
+    
+    '* Store the median value
+    Fetch Rec mid From Selection
+    med_str = SelAlias
+    median = Val(med_str)
+     
+    '* Add the new median column to the table
+    Alter Table Table_name (add NewCol Float)
+    Commit Table Table_name
+    
+    '* Store the alias of the new column in an array
+    ReDim MedAlias(y)
+    MedAlias(y) = NewCol
+    'MedAlias(y) = Table_name + "." + NewCol
+    y = y+1
+    
+    '* Populate the new column with the ranked score
+    RunStr = "Update " + Table_name + " Set " + NewCol + " = " + ColNum + "/" + median
+    Run Command RunStr
+    'Update Table_name Set NewCol = COLAlias/median
+    Commit Table Table_name 
+  Next
+  ReDim Columns(0)
+  Call final_score
+End Sub
+
+'********** FINAL_SCORE - Create the string associated with the sum of the weighted scores, then update the final column ******************
+
+
+Sub final_score
+
+ Dim Array_size, j as Integer
+ Dim Final, runstr as String
+ Dim Weight as Float
+
+  Array_size = UBound(Weights)
+  Alter Table Table_name (add Final_Score Float)
+  Final = MedAlias(1) + " * " + Weights(1)
+  
+  If Array_size > 1 Then
+    For j = 2 to Array_size
+      Final = Final + " + " + MedAlias(j) + " * " + Weights(j)
+    Next
+  End If
+  
+  runstr = "Update " + Table_name + " Set Final_Score = " + Final
+  run command runstr
+  Commit Table Table_name
+  ReDim Weights(0)
+  ReDim MedAlias(0)
+End Sub
+
+
+
+
+
+
+
+
+

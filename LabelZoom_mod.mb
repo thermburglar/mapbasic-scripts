@@ -1,0 +1,183 @@
+'**************
+'LabelZoom
+'This is a tool to change the mapper to the correct zoom for labeling
+'then change it back again, naturally
+' Copyright (right!) 2005 Chad Christensen
+' 12 May 2005
+'Modified 27 July 2006 by Erin Comparri
+'Now reverts back to last editable layer after drawing boundary box and then makes
+'cosmetic layer unselectable.
+'**************
+
+Include "mapbasic.def"
+Include "icons.def"
+
+Declare Sub Main
+Declare Sub lzoom
+Declare Sub lzoomreturn
+Declare Sub Byebye
+
+Dim Layout_ID, Map_Id as Integer
+Dim MapX, MapY, MapZoom as Float
+Dim MapCoords as String
+
+sub Main
+
+  Alter buttonPad "Tools"
+    Add ToggleButton
+       Icon MI_Icon_LETTERS_Z
+		ID 1001
+		helpmsg "LabelZoom - zoom the mapper to label\nLabelZoom - zoom the mapper to label"
+		calling lzoom
+'	Add Pushbutton
+'		Icon MI_Icon_Letters_X
+'		ID 1009
+'		helpmsg "Unload LabelZoom\nUnload LabelZoom"
+'		Calling Byebye
+	show
+
+  Create Menu "LabelZoom" As
+    "Zoom to actual label size" Calling lzoom,
+    "Unload LabelZoom" Calling Byebye
+
+  Alter menu "Tools" Add "LabelZoom" as "Labelzoom"
+  Alter menu ID 19 Add "LabelZoom" calling lzoom
+
+end sub
+
+Sub lzoom
+
+	Dim Frame_name as String
+	Dim oFrame as Object
+	Dim alias_Frame as Alias 'alias is a column name
+	Dim EditLayer as Float
+	
+	Dim Frame_width, Mapper_width, Mapper_scale, Frame_scale, Target_zoom as Float
+	
+	'* make sure a layout is the active window
+	If Not FrontWindow() Then
+		Note "You must have a layout active."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_LAYOUT Then
+		Note "You must have a layout active."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Else
+		Layout_ID = FrontWindow()
+		Frame_name = WindowInfo(Layout_ID, WIN_INFO_TABLE)	
+		alias_Frame = Frame_name + ".obj"
+	End If
+	
+
+	'*make sure that exactly one item is selected, 
+	'*and the selection is a layout frame containing a map
+	If SelectionInfo(SEL_INFO_NROWS) = 0 Then
+		Note "You must select a layout frame object."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif SelectionInfo(SEL_INFO_NROWS) > 1 Then
+		Note "You must have only ONE layout frame selected."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif Left$(SelectionInfo(SEL_INFO_TABLENAME), 6) <> "Layout" Then
+		Note "You must select a layout frame object."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif ObjectInfo(Selection.obj,OBJ_INFO_TYPE) <> OBJ_TYPE_FRAME Then
+		Note "You must select a frame from the layout."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Else
+		Fetch rec 1 from Selection
+		oframe = alias_frame
+		Map_ID = ObjectInfo(oFrame, OBJ_INFO_FRAMEWIN)
+
+	Set Layout Window Layout_ID Frame Contents Off
+
+		If WindowInfo(Map_ID, WIN_INFO_TYPE) = WIN_MAPPER and Map_ID <> 0 Then
+
+			'*save mapper window view
+			MapX = MapperInfo (Map_Id, 3)
+			MapY = MapperInfo (Map_Id, 4)
+			MapZoom = MapperInfo (Map_Id, 1)
+			MapCoords = MapperInfo (Map_Id, 17)
+
+			'*get the width on layout
+			Set Coordsys Layout units "in"
+			Frame_Width = ObjectGeography(oFrame, OBJ_GEO_MAXX) - ObjectGeography(oFrame, OBJ_GEO_MINX)
+
+			'*calculate layout scale
+			Set Distance Units "mi"
+			Frame_scale = MapZoom / Frame_Width
+	
+			'* calculate target mapper zoom level
+			Target_zoom = Frame_scale * WindowInfo (Map_Id, 4)
+
+		Else
+			Note "You must select a frame containing a map."
+			Exit Sub
+		End If
+
+	End If
+
+	'*remember which layer is editable
+	EditLayer = MapperInfo(Map_ID, MAPPER_INFO_EDIT_LAYER)
+
+	'*draw box on cosmetic layer so user knows bounds
+	Set Coordsys Earth Projection 1,33
+	set map Window Map_Id Layer 0 editable
+	create Rect
+		Into Window Map_Id
+		(MapperInfo (Map_ID,5), MapperInfo (Map_Id,8)) (MapperInfo(Map_Id,7), MapperInfo(Map_Id,6))
+		Pen (3,12,16000000)
+		Brush (1,0)
+	Set map Window Map_ID Layer EditLayer editable
+	Set map Window Map_ID Layer 0 Selectable off
+
+	'*reset window, change mapper window scale, and wait
+	Set Map Window Map_Id
+		zoom Target_Zoom Units "mi"
+   
+   Set Window Frontwindow() Restore
+
+   Set Window Map_Id Restore Front
+
+	Create ButtonPad "LabelZoomReturn" As
+		PushButton
+	      		Icon MI_Icon_LETTERS_Z
+			ID 1002
+			helpmsg "LabelZoom - return the mapper when finished"
+			calling lzoomreturn
+		show
+		Float
+		Position (0.6, 2) Units "in"
+'	Alter Button ID 1009 disable
+	Alter Button ID 1001 disable
+End Sub
+
+Sub lzoomreturn
+	
+	Alter Button ID 1001 Enable Uncheck
+'	Alter Button ID 1009 Enable
+
+	set coordsys Earth Projection 1,33
+
+	'*change mapper back to original when button pushed
+	Set Map Window  Map_id
+	zoom  MapZoom  Units "mi"	
+	center (Mapx,Mapy)
+
+	'*layout active again
+	Set Layout Window Layout_ID Frame Contents Active
+
+	Alter ButtonPad "LabelZoomReturn"
+		Fixed
+	Alter ButtonPad "LabelZoomReturn"
+		Destroy
+End Sub
+
+Sub Byebye
+	End Program
+End Sub
+'**Whoever ends up editing this tool, I feel sorry for you.  Hope all's well.

@@ -1,0 +1,72 @@
+'**************
+' Street Sorter 
+' Resorts street layers so highway labels are on the bottom and real street names are on top.
+' Copyright (right!) 2006 Erin Comparri
+' 20 November 2006
+'**************
+
+Include "mapbasic.def"
+Include "icons.def"
+
+Declare Sub Main
+Declare Sub StreetQuery
+
+Dim Table_name as String
+Dim sOpenTables() as String
+
+
+'********** MAIN - Lets the user choose what table to save a sorted copy of ****************** 
+
+sub Main
+
+ Dim iTabCount, x as Integer
+ Dim iNumTables, iTabNumber as Integer
+
+  iTabCount = NumTables()
+  redim sOpenTables(iTabCount)
+
+  For x = 1 to iTabCount
+   sOpenTables(x) = TableInfo(x,TAB_INFO_NAME) 
+  Next
+	Call StreetQuery
+end Sub
+
+'********** STREETQUERY - Selects the records in the table that meet the below criteria and saves them as a new table ****************** 
+
+sub StreetQuery
+Dim x as Integer
+
+For x = 1 to NumTables()
+
+Table_name = sOpenTables(x)
+
+Create Table Table_name+"_sorted" (Name Char(65))
+File "Q:\MapFiles\USA\GA\GDT160\sorted\"+Table_name+"_sorted"
+
+Create Map For Table_name+"_sorted" Using Table_name
+Commit Table Table_name+"_sorted"
+
+Commit Table Table_name As "Q:\Mapfiles\deleteme_Sorted"
+Open Table "Q:\Mapfiles\deleteme_Sorted" As Deleteme_sorted
+
+
+
+Select * from Deleteme_sorted Where
+Name LIKE "County Road%" OR Name LIKE "GA HWY%" OR Name LIKE "Georgia Highway%" OR Name LIKE "Georgia Hwy%" OR Name LIKE "State Highway%" OR Name LIKE "State HWY%" 
+OR Name LIKE "US HWY%" OR Name LIKE "Unnamed Street"
+
+Insert Into Table_name+"_sorted" 
+	Select * from Selection
+Commit Table Table_name+"_sorted"
+
+Delete from Selection
+
+Insert Into Table_name+"_sorted" 
+	Select * from Deleteme_sorted
+Commit Table Table_name+"_sorted"
+
+Drop Table Deleteme_sorted
+
+Next
+end Sub
+

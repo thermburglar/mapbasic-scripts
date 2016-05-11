@@ -1,0 +1,494 @@
+
+Include "C:\Program Files\MapInfo\MapBasic\SAMPLES\MAPBASIC\INC\menu.def"
+Include "C:\Program Files\MapInfo\MapBasic\SAMPLES\MAPBASIC\INC\mapbasic.def"
+Include "c:\Program Files\MapInfo\MapBasic\SAMPLES\MAPBASIC\INC\auto_lib.def"
+Include "C:\Program Files\MapInfo\MapBasic\SAMPLES\MAPBASIC\INC\icons.def"
+
+'*******************************************************************************************************
+' Title: MarketPlanMap_v2007.MBX
+' Final and Scenario Selection Tool for Store Analysis
+' Date: May 15, 2007
+' Copyright: Erin Comparri 2007
+'*******************************************************************************************************
+
+Declare Sub Main
+Declare Sub NewMap
+Declare Sub Workspace
+Declare Sub SyncFrame
+Declare Sub ScaleIt
+Declare Sub LayoutLauncher
+Declare Sub AutoSave
+
+Global str_Market, str_user, MarketPlanPoints, sWorkspaceName, Orientation As String
+Global i_type as SmallInt
+
+Sub Main
+
+Alter ButtonPad "Main"  Fixed  ToolbarPosition(1,0)
+Alter ButtonPad "DBMS"  Hide
+Alter ButtonPad "Drawing"  Fixed  ToolbarPosition(0,1)
+Alter ButtonPad "Standard"  Fixed  ToolbarPosition(0,0)
+Create ButtonPad "Market Plan Tools" as 
+	PushButton Calling NewMap
+		Icon MI_ICON_RUN
+		helpmsg "\nMP Mapper - Click here to start a new map"
+	PushButton Calling SyncFrame
+		Icon MI_ICON_LAYERS
+		helpmsg "\nMakes the mapper the same shape as the frame"
+	PushButton Calling ScaleIt
+		Icon MI_ICON_MAPSYMB_3
+		helpmsg  "\nOpens a scalebar for use on the layout"
+	Pushbutton Calling LayoutLauncher
+		Icon MI_ICON_MB_2
+		helpmsg "\nDisplays a list of premade layouts"
+	Pushbutton Calling AutoSave
+		Icon MI_ICON_SAVE_FILE
+		helpmsg "\nClick here to save your map"
+	Float
+	
+End Sub
+
+Sub NewMap
+
+Dim MinX, MinY, MaxX, MaxY, DeltaX, DeltaY as Float
+Dim FilePath, Colnum2, RunString, RunStr as String
+Dim Bounding as Object
+
+Dim NameArry(), TableFields() as String
+Dim irows, i, sLat, sLong as SmallInt
+Dim LocationX, LocationY as Float
+Dim MarketFile, Update_str, colnum as String
+Dim i_cols, x as SmallInt
+Dim UserList as String
+Dim NumberOfWindows	As SmallInt
+
+'*** Check to see if there is a map project open and if it should be saved ****
+
+If str_User Not LIKE "" Then 
+
+If Ask ("Would you like to save the current project?", "Yes", "No") = True 
+Then Call AutoSave
+
+End If
+End If
+
+
+Close All
+'*** Open Users File ****
+
+Open Table "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\User Name.TAB" as Users Interactive
+
+  	irows = TableInfo("Users",TAB_INFO_NROWS)
+	ReDim NameArry(irows)
+
+  	For x = 1 to irows 
+		Fetch Rec x From Users
+		NameArry(x)= Users.User_Name 
+  	Next	
+
+Close Table Users
+
+'*** Main dialog for Set-up ****
+
+Dialog 
+	Title "Market Plan Tool v2.0"	
+	Width 175
+	Height 145
+	Control StaticText 
+		Title "User Name:"
+		Position 33, 10
+	Control Listbox
+		Title From Variable NameArry
+		Position 78, 10
+		Height 50
+		Into str_user
+	Control StaticText 
+		Title "Market Plan Type:"
+		Position 13, 70
+	Control Listbox
+		Title "Scenario Selection;Final"
+		Position 78, 70
+		Height 20
+		Into i_type
+	Control StaticText 
+		Title "Market Name:"
+		Position 27, 100
+	Control EditText
+		Position 78, 100
+		Width 80
+   		Into  str_Market
+	Control OKButton
+		Position 120, 121
+
+If CommandInfo(CMD_INFO_DLG_OK)= FALSE then 
+Exit Sub
+End If
+
+ReDim NameArry(0)
+
+Run Menu Command M_File_Open
+
+OnError Goto OpenCanceled
+
+MarketPlanPoints = TableInfo(1, TAB_INFO_NAME)
+
+OnError Goto 0
+
+'*** Store Column Names in an Array ****
+i_cols = NumCols(MarketPlanPoints)
+	ReDim TableFields(i_cols)
+
+  	For x = 1 to i_cols 
+		colnum = "COL" + x
+		TableFields(x)= ColumnInfo(MarketPlanPoints, colnum, COL_INFO_NAME) 
+  	Next	
+
+'*** Ask user which columns to use for lat/long ****
+Dialog 
+	Title "Point Coordinates"
+	Control StaticText
+		Title "Latitude (Y) Field:"
+		Position 10, 70
+	Control StaticText
+		Title "Longitude (X) Field:"
+		Position 10, 10 
+	Control ListBox
+		Title From Variable TableFields
+		Position 75, 70
+		Height 50
+		into sLat
+	Control ListBox
+		Title From Variable TableFields
+		Position 75, 10
+		Height 50
+		into sLong 
+	Control OKButton
+
+If CommandInfo(CMD_INFO_DLG_OK)= FALSE then 
+Note "User Canceled Point Creation"
+Exit Sub
+End If
+
+'*** Create points, get extent of points  ****
+
+Create Map 
+	For   MarketPlanPoints CoordSys Earth Projection 1, 0
+
+Commit Table MarketPlanPoints
+
+Update_str = "Update " + MarketPlanPoints + " Set Obj= CreatePoint(" + TableFields(sLong) + ", " + TableFields(sLat) + ")"
+Run Command Update_str
+
+Commit Table MarketPlanPoints
+RunString = "Select Max(" + Tablefields(sLong) +")" + "From " + Marketplanpoints
+Run Command RunString
+MaxX = Selection.Col1
+RunString = "Select Min(" + Tablefields(sLong) +")" + "From " + Marketplanpoints
+Run Command RunString
+MinX = Selection.Col1
+
+RunString = "Select Max(" + Tablefields(sLat) +")" + "From " + Marketplanpoints
+Run Command RunString
+MaxY = Selection.Col1
+RunString = "Select Min(" + Tablefields(sLat) +")" + "From " + Marketplanpoints
+Run Command RunString
+MinY = Selection.Col1
+
+ReDim Tablefields(0)
+
+FilePath = PathToDirectory$(TempFileName$( "" ))
+Create Table TempMap (boxer char(4)) File FilePath 
+
+Create Map 
+	For TempMap CoordSys Earth Projection 1,0
+
+Commit Table TempMap
+
+create Rect
+		Into Variable Bounding
+		(MinX, MaxY)(MaxX, MinY)
+		Pen (3,12,16000000)
+		Brush (1,0)
+
+DeltaX = Abs(MaxX - MinX)
+DeltaY = Abs(MaxY - MinY)
+If Deltax < DeltaY Then
+Orientation = "P"
+Else 
+Orientation = "L"
+End if
+
+Insert into TempMap (Obj) Values (Bounding)
+Commit Table TempMap
+
+Open Table "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\MapRegions.TAB" As "MR"
+
+RunStr = "Select Workspace from MR, tempmap where MR.obj contains " + TempMap + ".obj"
+Run Command RunStr
+
+If SelectionINFO(SEL_INFO_NROWS) = 0 Then
+Note "Points fall outside current mappable boundaries."
+Exit Sub
+End If
+
+Fetch First from Selection
+sWorkspaceName = Selection.workspace
+
+Close Table MR
+Close Table Tempmap
+
+Call Workspace
+
+Exit Sub
+
+OpenCanceled:
+	Note "No File to Open. Map creation halted."
+
+End Sub
+
+
+Sub Workspace
+
+'*** Open the Map Layout ******* 
+If i_type = 1 And Orientation = "P" Then
+Run Application "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Source Files\Draft_P.wor"
+ElseIf i_type = 1 And Orientation = "L" Then
+Run Application "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Source Files\Draft_L.wor"
+ElseIf i_type = 2 And Orientation = "P" Then
+Run Application "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Source Files\Final_P.wor"
+ElseIf i_type = 2 And Orientation = "L" Then
+Run Application "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Source Files\Final_L.wor"
+End If
+
+'*** Open the Basemap ********
+
+Run Application sWorkspaceName
+
+
+'*** add the map points, create the correct symbol thematic ********
+
+Add Map Layer MarketPlanPoints
+Set Map Zoom Entire Layer 1
+
+If i_type = 1 Then
+set map 
+		layer MarketPlanPoints 
+ 		   	Display Graphic
+ 		   	Global   Symbol (35,0,12)   
+ 		   	Zoom (0, 500) Units "mi" 
+ 		   	Label Line None Position Right Font ("Century Gothic",769,10,Black,White) Pen (1,2,0) 
+  		   		With Name
+   		   		Parallel On Auto On Overlap On Duplicates On Offset 10
+    	  		Visibility On
+
+	shade 1 with Classification values 
+  		"" Symbol (34,16711680,12),
+  		"Approved Store" Symbol (36,255,22) ,
+  		"Hit List Void" Symbol (35,32768,30) ,
+  		"Non-Sacred Cow" Symbol (50,16760832,20,"MapInfo Transportation",16,0) ,
+  		"Opt Void" Symbol (34,9474303,20) ,
+  		"Sacred Cow" Symbol (60,16711680,22,"MapInfo Cartographic",16,0),
+		"Proposed BRFS" Symbol (33,16765088,22)  
+  		default Symbol (40,0,12)   '# color 1 # 
+
+Else
+set map 
+		layer MarketPlanPoints 
+ 		   	Display Graphic
+ 		   	Global   Symbol (35,0,12)   
+ 		   	Zoom (0, 500) Units "mi" 
+ 		   	Label Line None Position Right Font ("Century Gothic",769,10,Black,White) Pen (1,2,0) 
+  		   		With Name
+   		   		Parallel On Auto On Overlap On Duplicates On Offset 10
+    	  		Visibility On
+
+	shade 1 with Classification values 
+  		"" Symbol (34,16711680,12) ,
+  		"Closed Store" Symbol (114,16711680,22,"Webdings",16,0) ,
+  		"Future Opportunity" Symbol (59,24576,24) ,
+  		"Open Store" Symbol (34,12583008,22) ,
+  		"Open Void - Core" Symbol (35,16776960,30) ,
+		"Approved Store" Symbol (36,255,22),
+		"Open Void - Small Box" Symbol (70,16776960,18,"MapInfo Cartographic",16,0), 
+		"Hit List Void - Not Pursue" Symbol (35,8421504,30) ,
+		"Proposed BRFS" Symbol (33,16765088,22) 
+  		default Symbol (40,0,12)   '# color 1 # 
+End If
+End Sub
+
+
+'**** SyncFrame-Makes the mapper the same shape as the frame it is shown in ****
+Sub SyncFrame
+
+	Dim LayoutID, MapId as Integer
+	Dim Lname as String
+	Dim oFrame as Object
+	Dim aFrame as Alias
+	
+	Dim LDeltaX, LDeltaY as Float
+	Dim LRatio as Float	'x over y
+
+	Dim MapX, MapY as Float
+
+	
+	'* make sure a layout is the active window
+	If Not FrontWindow() Then
+		Note "You must have a layout active."
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_LAYOUT Then
+		Note "You must have a layout active."
+		Exit Sub
+	Else
+		LayoutID = FrontWindow()
+		Lname = WindowInfo(LayoutID, WIN_INFO_TABLE)	
+		aFrame = Lname + ".obj"
+	End If
+	
+
+	'* make sure that one and only one item is selected, 
+	'*   and the selection is a layout frame containing a map
+	If SelectionInfo(SEL_INFO_NROWS) = 0 Then
+		Note "You must select a layout frame object."
+		Exit Sub
+	Elseif SelectionInfo(SEL_INFO_NROWS) > 1 Then
+		Note "You must have only ONE layout frame selected."
+		Exit Sub
+	Elseif Left$(SelectionInfo(SEL_INFO_TABLENAME), 6) <> "Layout" Then
+		Note "You must select a layout frame object."
+		Exit Sub
+	Elseif ObjectInfo(Selection.obj,OBJ_INFO_TYPE) <> OBJ_TYPE_FRAME Then
+		Note "You must select a frame from the layout."
+		Exit Sub
+	Else
+		Fetch rec 1 from Selection
+		oFrame = aFrame
+		MapID = ObjectInfo(oFrame, OBJ_INFO_FRAMEWIN)
+
+		If WindowInfo(MapID, WIN_INFO_TYPE) = WIN_MAPPER and MapID <> 0 Then
+	
+			'* query the frame and get the x/y ratio
+			Set Coordsys Layout units "in"
+			LDeltaX = ObjectGeography(oFrame, OBJ_GEO_MAXX) - ObjectGeography(oFrame, OBJ_GEO_MINX)
+			LDeltaY = ObjectGeography(oFrame, OBJ_GEO_MAXY) - ObjectGeography(oFrame, OBJ_GEO_MINY)
+			LRatio = LDeltaX / LDeltaY
+	
+			'* get the current map height (we'll leave the height alone and
+			'*    adjust the width to get the correct ratio)
+			MapY = WindowInfo(MapId, WIN_INFO_HEIGHT)	
+			MapX = LRatio * MapY
+
+			'* set the map width
+			Set Window MapID Width MapX
+
+		Else
+			Note "You must select a frame containing a map."
+			Exit Sub
+		End If
+
+	End If
+End Sub
+
+'**** ScaleIt-Opens a premade scalebar for use in the layout ****
+Sub ScaleIt
+
+Dim iScaleBar, iRowCnt, x, iScale as Integer
+Dim sScale(), sFileName as String
+
+  Open Table "G:\REMap\GIS Users\GIS Tool Development\Scalebars\Scalebar.TAB" as Scalebar
+  iRowCnt = TableInfo(Scalebar, TAB_INFO_NROWS)
+  ReDim sScale(iRowCnt)
+  For x = 1 to iRowCnt
+  Fetch Rec x From Scalebar
+  sScale(x) = Scalebar.Scale
+  Next
+
+  Dialog Title "Select Scale"
+   Control ListBox
+     Position 5,5 Width 75 Height 100
+     Title From Variable sScale
+     Value 0
+     Into iScale
+   Control OKButton
+   Control CancelButton
+
+   If CommandInfo(CMD_INFO_DLG_OK) Then
+    If iScale <> 0 Then
+     Fetch Rec iScale From Scalebar
+     sFileName = Scalebar.File  
+     Open Table "G:\REMap\GIS Users\GIS Tool Development\Scalebars\" + sFileName
+     Close Table Scalebar
+     sFileName = Left$(sFileName, Len(sFileName)-4)
+     Map From sFileName
+     Position (1,1)
+     Width 3.0
+     Height 1.0
+     Set Map Window FrontWindow() Zoom Entire 
+     Set Window FrontWindow() ScrollBars Off 
+     Set Window FrontWindow() Autoscroll Off
+     Set Window FrontWindow() Title "S:"+sScale(iScale)
+     Set Window FrontWindow() Min
+    End If
+   End If
+ ReDim sScale(0)
+End Sub
+
+
+'**** LayoutLauncher - Provides a list of layouts, opens the users choice *****
+
+Sub LayoutLauncher
+Dim iLayout, iRowCnt, x as Integer
+Dim sLayout(), sFileName as String
+
+  Open Table "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Source Files\Layoutlist.TAB" as LayoutList
+  iRowCnt = TableInfo(LayoutList, TAB_INFO_NROWS)
+  ReDim sLayout(iRowCnt)
+  For x = 1 to iRowCnt
+  Fetch Rec x From LayoutList
+  sLayout(x) = LayoutList.Name
+  Next
+
+  Dialog Title "Select Layout"
+   Control ListBox
+     Position 5,5 Width 75 Height 100
+     Title From Variable sLayout
+     Value 0
+     Into iLayout
+   Control OKButton
+   Control CancelButton
+
+   If CommandInfo(CMD_INFO_DLG_OK) Then
+    If iLayout <> 0 Then
+     Fetch Rec iLayout From LayoutList
+     sFileName = "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Source Files\" + LayoutList.File  
+     Close Table LayoutList
+	  Run Application sFileName
+    End If
+   End If
+ ReDim sLayout(0)
+End Sub
+
+'**** AutoSave - Saves the project file with the specified naming convention ******
+
+Sub AutoSave
+
+Dim WSpace	As String
+
+if str_user = "" Then
+Note "Please create a Market Plan Map first."
+Else
+Note "A MapInfo workspace will be saved to the following folder: " + chr$(13) + "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\" + chr$(13) + "Workspaces\Market Plan\BR\Maps\" + str_user + " " + str_Market + ".WOR"
+
+WSpace = "G:\REMap\GIS Users\GIS Tool Development\GIS Data Dictionary\Workspaces\Market Plan\Maps\" + str_user + " " + str_Market + ".WOR"
+
+Save  Workspace  As  WSpace
+End If
+
+End Sub
+
+
+
+
+
+
+
+

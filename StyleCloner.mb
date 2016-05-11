@@ -1,0 +1,398 @@
+'**************
+' Workspace StyleCloner 
+' Tool that copies override styles from one layer to another
+' Copyright (right!) 2006 Erin Comparri
+' 11 September 2006
+'**************
+
+Include "mapbasic.def"
+Include "icons.def"
+
+Declare Function LineString(ByVal CPen as Pen) As String
+Declare Sub Main
+Declare Sub HighFashion
+Declare Sub MapFreeze
+Declare Sub MapThaw
+Declare Sub Values_Reader
+Declare Sub Cloner
+
+Dim mapper_ary() as Integer
+Dim copy_layer_name() as String
+Dim paste_layer_name() as String
+Dim CopyMap, PasteMap as Integer
+Dim CopyList(), PasteList() as Integer
+
+'********** MAIN - Adds StyleCloner into the 'Tools' Menu ****************** 
+
+Sub Main
+ Create Menu "StyleCloner" As
+ 	"StyleCloner" Calling HighFashion  
+ Alter menu "Tools" Add "StyleCloner" As "StyleCloner"
+end Sub
+
+'********** HIGHFASHION - Creates the tool dialog and populates the mapper drop downs with map window names ****************** 
+
+Sub HighFashion
+
+Dim nWindows,nWindowId as integer
+Dim x, y, idnum as Integer
+Dim mapper_name() as String
+y = 1
+nWindows = numwindows()
+
+For x = 1 to nWindows
+ nWindowID = windowinfo(WindowID(x),WIN_INFO_TYPE)
+ If nWindowID = WIN_MAPPER Then
+   ReDim mapper_ary(y)
+   ReDim mapper_name(y)
+   mapper_ary(y) = x
+   mapper_name(y) = windowinfo(WindowID(x),WIN_INFO_NAME)
+   y = y+1
+ End If
+Next
+
+'Check if there are any windows open
+If UBound(mapper_ary) = 0 Then 
+Note "No Map Windows Open"
+Exit Sub
+End If
+
+Dialog
+  Title "Style Cloner 4000"
+  'Width 415
+  Control StaticText
+   Position 6, 10
+	Title "Copy Style From:"
+  Control StaticText
+ 	Position 221, 10
+ 	Title "Paste Style Into:"
+  Control PopupMenu
+    ID 2
+    Width 200
+    Position 5, 20
+    Title From Variable mapper_name
+  Control PopupMenu
+	 ID 3
+	 Width 200
+    Position 220, 20
+	 Title From Variable mapper_name
+  Control Button
+    ID 101
+	 Width 50
+    Position 430, 19
+    Title "Pick Layers"
+    Calling MapFreeze
+  Control Button
+	 ID 102
+    Width 50
+	 Position 430, 19
+    Title "Go Back"
+    Calling MapThaw
+    Hide
+  
+  Control PopupMenu
+    ID 4
+	 Width 150
+	 Position 10, 45
+    Disable
+  Control PopupMenu
+	 ID 5
+	 Width 150
+	 Position 225, 45
+    Disable
+
+  Control PopupMenu
+    ID 6
+	 Width 150
+	 Position 10, 63
+    Disable
+  Control PopupMenu
+	 ID 7
+	 Width 150
+	 Position 225, 63
+    Disable
+ 
+  Control PopupMenu
+    ID 8
+	 Width 150
+	 Position 10, 81
+    Disable
+  Control PopupMenu
+	 ID 9
+	 Width 150
+	 Position 225, 81
+    Disable
+
+  Control PopupMenu
+    ID 10
+	 Width 150
+	 Position 10, 99
+    Disable
+  Control PopupMenu
+	 ID 11
+	 Width 150
+	 Position 225, 99
+    Disable
+
+  Control PopupMenu
+    ID 12
+	 Width 150
+	 Position 10, 117
+    Disable
+  Control PopupMenu
+	 ID 13
+	 Width 150
+	 Position 225, 117
+    Disable
+
+  Control PopupMenu
+    ID 14
+	 Width 150
+	 Position 10, 135
+    Disable
+  Control PopupMenu
+	 ID 15
+	 Width 150
+	 Position 225, 135
+    Disable
+
+  Control OKButton
+	 ID 103
+	 Calling Values_Reader
+	 Disable
+
+    ReDim mapper_name(0)  
+end Sub
+
+'********** MAPFREEZE - Disables the map drop downs and populates the layer drop downs ******************
+
+Sub MapFreeze
+
+ Dim copynum, pastenum as Integer
+ Dim nLayers, nWindowId as integer
+ Dim y, j as Integer
+ 
+	'* Populate an array with the names and numbers of layers in the mapper to copy from
+   copynum = ReadControlValue(2)
+   CopyMap = mapper_ary(copynum)
+   y = 1
+   nLayers = MapperInfo(WindowID(CopyMap), MAPPER_INFO_LAYERS)
+   ReDim copy_layer_name(nLayers + 1)
+   copy_layer_name(1) = "[None]"
+
+   For j = 1 to nLayers
+   copy_layer_name(y+1) = LayerInfo(WindowID(CopyMap), j, LAYER_INFO_NAME)
+   y = y+1
+   Next
+
+	'* Populate an array with the names and numbers of layers in the mapper to paste into
+	pastenum = ReadControlValue(3)
+ 	PasteMap = mapper_ary(pastenum)
+ 	y = 1
+ 	nLayers = MapperInfo(WindowID(PasteMap), MAPPER_INFO_LAYERS)
+	ReDim paste_layer_name(nLayers + 1)
+	paste_layer_name(1) = "[None]"
+	
+	For j = 1 to nLayers
+	paste_layer_name(y+1) = LayerInfo(WindowID(PasteMap), j, LAYER_INFO_NAME)
+	y = y+1
+	Next
+
+	Alter Control 2 Disable
+	Alter Control 3 Disable
+
+	Alter Control 4 Title From Variable copy_layer_name Enable
+	Alter Control 5 Title From Variable paste_layer_name Enable
+	Alter Control 6 Title From Variable copy_layer_name Enable
+	Alter Control 7 Title From Variable paste_layer_name Enable
+	Alter Control 8 Title From Variable copy_layer_name Enable
+	Alter Control 9 Title From Variable paste_layer_name Enable
+	Alter Control 10 Title From Variable copy_layer_name Enable
+	Alter Control 11 Title From Variable paste_layer_name Enable
+	Alter Control 12 Title From Variable copy_layer_name Enable
+	Alter Control 13 Title From Variable paste_layer_name Enable
+	Alter Control 14 Title From Variable copy_layer_name Enable
+	Alter Control 15 Title From Variable paste_layer_name Enable
+
+	Alter Control 101 Hide
+	Alter Control 102 Show 
+	Alter Control 103 Enable 
+End Sub
+
+'********** MAPTHAW - Reactivates the map drop downs to allow the user to make changes ******************
+
+Sub MapThaw
+	
+	Alter Control 2 Enable
+	Alter Control 3 Enable
+
+	Alter Control 4 Disable
+	Alter Control 5 Disable
+	Alter Control 6 Disable
+	Alter Control 7 Disable
+	Alter Control 8 Disable
+	Alter Control 9 Disable
+	Alter Control 10 Disable
+	Alter Control 11 Disable
+	Alter Control 12 Disable
+	Alter Control 13 Disable
+	Alter Control 14 Disable
+	Alter Control 15 Disable
+	
+	Alter Control 101 Show
+	Alter Control 102 Hide
+	Alter Control 103 Disable
+End Sub
+
+'********** VALUES_READER - Stores the values for the layers chosen to copy and paste ******************
+
+Sub Values_Reader
+
+ Dim CopyNum, PasteNum, j, LPaste, LCopy, y as Integer
+ Dim Weight as Float
+  
+  CopyNum = 2
+  PasteNum = 3
+  y = 1
+  For j = 1 to 6
+    CopyNum = CopyNum + 2
+    PasteNum = PasteNum + 2
+    LCopy = ReadControlValue(CopyNum) - 1
+    LPaste = ReadControlValue(PasteNum) - 1
+    If LCopy = 0 Then
+    ElseIf LPaste = 0 Then
+    Else
+      ReDim CopyList(y)
+      ReDim PasteList(y)
+      CopyList(y) = LCopy
+      PasteList(y) = LPaste
+      y = y+1
+    End If
+  Next
+
+  ReDim mapper_ary(0)
+  ReDim copy_layer_name(0)
+  ReDim paste_layer_name(0)
+
+  Call Cloner
+End Sub
+
+'********** CLONER -  Queries the state of each parameter and builds a "Set Map" string based on the states of each layer.******************
+
+Sub Cloner
+  Dim j as Integer
+  Dim CPen as Pen
+  Dim CBrush as Brush
+  Dim CSymbol as Symbol
+  Dim CFont, CLFont as Font
+  Dim CLine, CDisp, LLineType, CZoom, CLExp, CLAuto, CLOvlp, CLDup, PosStr, CloneString as String
+  Dim CLLine, CLPos, CLViz, CDisplay, CLOff as SmallInt
+  Dim CZoomMin, CZoomMax as Float
+  Dim ZoomON, AutoON, OvlpON, DupON, CLPart as Logical
+
+	CloneString = "Set Map Window WindowID(" + PasteMap + ")"
+	For j = 1 to UBound(CopyList)
+	  CPen = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_OVR_LINE)
+	  CLine = LineString(CPen)
+	  CPen = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_OVR_PEN)
+	  CBrush = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_OVR_BRUSH)
+	  CSymbol = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_OVR_SYMBOL)
+	  CFont = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_OVR_FONT)
+
+	  CZoomMin = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_ZOOM_MIN)
+	  CZoomMax = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_ZOOM_MAX)
+	  ZoomON = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_ZOOM_LAYERED)
+		If ZoomON = True Then 
+			CZoom = "On"
+		Else CZoom = "Off"
+		End If
+
+	  CDisplay = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_DISPLAY)
+		If CDisplay = LAYER_INFO_DISPLAY_OFF Then 
+			CDisp = "Off"
+		ElseIf CDisplay = LAYER_INFO_DISPLAY_GLOBAL Then
+			CDisp = "Global"
+		Else CDisp = "Graphic"
+		End If
+		
+	  CLFont = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_FONT)
+	  CLExp = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_EXPR)
+	  CLLine = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_LT)
+		If CLLine = LAYER_INFO_LBL_LT_NONE Then
+			LLineType = "None"
+		ElseIf CLLine = LAYER_INFO_LBL_LT_SIMPLE Then
+			LLineType = "Simple"
+		Else LLineType = "Arrow"
+		End If
+	
+	  AutoON = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_AUTODISPLAY)
+		If AutoOn = True Then
+			CLAuto = "On"
+		Else CLAuto = "Off"
+		End If
+
+	  CLOff = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_OFFSET)
+
+	  OvlpON = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_OVERLAP)
+		If OvlpON = True Then
+			CLOvlp = "On"
+		Else CLOvlp = "Off"
+		End If
+
+	  DupON = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_DUPLICATES)
+		If DupOn = True Then
+			CLDup = "On"
+		Else CLDup = "Off"
+		End If
+	 
+	  CLPos = LayerInfo(WindowID(CopyMap), CopyList(j), LAYER_INFO_LBL_POS)
+		If CLPos = LAYER_INFO_LBL_POS_TL Then
+			PosStr = "Above Left"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_TC Then
+			PosStr = "Above"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_TR Then
+			PosStr = "Above Right"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_CL Then
+			PosStr = "Left"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_CC Then
+			PosStr = "Center"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_CR Then
+			PosStr = "Right"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_BL Then
+			PosStr = "Below Left"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_BC Then
+			PosStr = "Below"
+		ElseIf CLPos = LAYER_INFO_LBL_POS_BR Then
+			PosStr = "Below Right"
+
+		End If
+
+
+	  CloneString = CloneString + " Layer " + PasteList(j) + " Zoom(" + CZoomMin + ", " + CZoomMax + ") " + CZoom + " Display " + CDisp + " Global " + CPen + " " + CLine + " " + CBrush + " " 
+		+ CSymbol + " " + CFont + " Label Line " + LLineType + " Position " + PosStr + " " + CLFont + " Auto " + CLAuto + " Overlap " + CLOvlp + " Duplicates " + CLDup + " Offset " + CLOff
+ 	Next
+
+	Run Command CloneString
+
+  ReDim CopyList(0)
+  ReDim PasteList(0)
+End Sub
+
+
+Function LineString(ByVal CPen as Pen) As String
+' Takes a Pen Variable and makes a String for use with Line style statements
+Dim LineStr as String
+LineStr = Str$(CPen)
+LineStr = Right$(LineStr, Len(LineStr) - 3)
+LineString = "Line" + LineStr
+End Function
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,39 @@
+
+
+Include "mapbasic.def"
+Include "icons.def"
+Include "menu.def"
+
+Declare Sub Main
+
+Sub Main
+Dim ziptemp as Object
+Dim x, y as integer
+Dim tableA, tableB, endtable, sZipcode, RunStr, store_num, sname as String
+
+tablea = USA_ZIP_CODES_2005_DEMO
+tableb = ON_Trades
+endtable = ON_Trades_new
+y = 1
+For x = 1 to TABLEINFO(tableb, TAB_INFO_NROWS)
+Fetch Rec x from ON_trades
+szipcode = ON_trades.zip
+Store_num = ON_trades.storeid
+sname = ON_trades.name
+
+Fetch rec y from tablea
+Do While USA_ZIP_CODES_2005_DEMO.id NOT LIKE szipcode AND NOT EOT(USA_ZIP_CODES_2005_DEMO)
+	y = y + 1	
+	Fetch Rec y from tablea
+Loop
+If Eot(USA_ZIP_CODES_2005_DEMO) Then 
+Note "Reached End of table without a match"
+Exit sub
+Else
+ 	ziptemp = USA_ZIP_CODES_2005_DEMO.obj
+	Insert into endtable (Storeid, Name, Zip, Obj)
+		Values(store_num, sname, szipcode, ziptemp)
+Commit Table endtable
+End if 
+Next
+End Sub

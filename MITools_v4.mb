@@ -1,0 +1,670 @@
+'MI Tools contains the following applcations for MapInfo
+'  SyncFrame					Edit WOR						Get Info Window
+'	Preserve Zoom/Scale		MapSizer						Get Stats Window
+'	Single Layout Page		Frame Contents On/Off		Window Finder
+'	View Recorder				Scalebar Tool					Window Recenter	
+
+'**************
+' Revised on September 6, 2006 
+' The Following parts Copyright (right!) 2006 Erin Comparri:
+' Subs WindowFinder, OpenWindows, WinMinimizer
+' WindowFinder was completly rewritten to utilize MultiListBoxes and to make
+' bigger list windows.  OpenWindows is called from WindowFinder to implement the
+' multilist box capabilities.  WinMinimizer minimizes all windows in the workspace.
+
+' Revised on April 3, 2007
+' Removed unecessary parts, rerouted paths, etc.
+' ScaleIt code replaced with modified ScaleIt2 code from ScalebarKM.mb 
+'**************
+
+
+
+Include "mapbasic.def"
+Include "menu.def"
+Include "icons.def"
+
+Declare Sub Main
+Declare Sub SyncFrame
+Declare Sub EditWOR
+Declare Sub GetInfo
+Declare Sub GetStats
+Declare Sub WinTitler
+Declare Sub PreserveZoomScale
+Declare Sub RecView
+Declare Sub SinglePage
+Declare Sub FrameContents
+Declare Sub ScaleIt
+Declare Sub MapSizer
+Declare Sub DeleteObj
+Declare Sub AboutApp
+Declare Sub WindowFinder
+Declare Sub WinMinimizer
+Declare Sub WinRecenter
+Declare Sub ChngView
+Declare Sub OpenWindows
+Declare Sub ripMe
+Declare Sub LayoutCloner
+Global xAng as integer
+
+Global i as integer
+
+Global sBrowser as String
+Global iDisplayCount as integer
+Dim sPreserve, sOnOff, sMCUser as String
+Dim sZoom, sLon, sLat as String
+Dim lRevMenu as Logical
+Dim sLogoIt as String
+Dim mapnum(), layoutnum(), othernum() as Integer
+
+sub Main
+
+Alter MapInfoDialog  3490 
+		Control 26 Value 1
+
+
+
+i = 90
+
+  Alter Menu  "Layout"   Add
+       "Sync Frame" Calling SyncFrame
+
+  Alter Menu  "Tools"   Add
+       "Edit WOR..." Calling EditWOR
+
+  Alter Menu  "Options"   Add
+       "Find Info Window" Calling GetInfo,
+       "Find Statistics Window" Calling GetStats
+
+  Alter Menu  "MapperShortcut"   Add
+       "Window Titler" Calling WinTitler,
+       "Preserve Zoom" ID 402 Calling PreserveZoomScale,
+       "Record View" ID 403 Calling RecView
+
+  Alter Menu  "LayoutShortcut"   Add
+       "Single Page" Calling SinglePage,
+       "Contents Off" ID 401 Calling FrameContents,
+       "Window Titler" Calling WinTitler,
+       "Open Scale Bar" Calling ScaleIt
+
+  Alter Menu  "BrowserShortcut"   Add
+       "Window Titler" Calling WinTitler
+
+  Alter Menu  "Map"   Add
+       "Map Sizer" Calling MapSizer
+
+  Alter Menu "Table" Add
+       "Delete Selected Obj"  Calling DeleteObj
+
+  Alter Menu  "Help"   Add
+    "(-",
+       "About MI Tools..." Calling AboutApp
+
+  Alter ButtonPad "Main"
+    Add PushButton
+      Icon MI_ICON_MB_9
+      ID 501
+      HelpMsg "Window Finder"
+      Calling WindowFinder
+
+  Alter ButtonPad "Main"
+    Add PushButton
+      Icon MI_ICONS_MAPS_6
+      Calling ScaleIt
+
+   Alter Menu "Window" Add
+       "Minimize All Windows" Calling WinMinimizer
+
+   Alter menu ID 19 Add "Sync Frame" calling "SyncFrame"
+	Alter menu ID 19 Add "Clone Layout" calling "LayoutCloner"
+
+	Alter menu ID 17 Add "Recenter Window" calling "WinRecenter"
+
+
+end sub
+
+'**** SyncFrame-Makes the mapper the same shape as the frame it is shown in ****
+Sub SyncFrame
+
+	Dim LayoutID, MapId as Integer
+	Dim Lname as String
+	Dim oFrame as Object
+	Dim aFrame as Alias
+	
+	Dim LDeltaX, LDeltaY as Float
+	Dim LRatio as Float	'x over y
+
+	Dim MapX, MapY as Float
+
+	
+	'* make sure a layout is the active window
+	If Not FrontWindow() Then
+		Note "You must have a layout active."
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_LAYOUT Then
+		Note "You must have a layout active."
+		Exit Sub
+	Else
+		LayoutID = FrontWindow()
+		Lname = WindowInfo(LayoutID, WIN_INFO_TABLE)	
+		aFrame = Lname + ".obj"
+	End If
+	
+
+	'* make sure that one and only one item is selected, 
+	'*   and the selection is a layout frame containing a map
+	If SelectionInfo(SEL_INFO_NROWS) = 0 Then
+		Note "You must select a layout frame object."
+		Exit Sub
+	Elseif SelectionInfo(SEL_INFO_NROWS) > 1 Then
+		Note "You must have only ONE layout frame selected."
+		Exit Sub
+	Elseif Left$(SelectionInfo(SEL_INFO_TABLENAME), 6) <> "Layout" Then
+		Note "You must select a layout frame object."
+		Exit Sub
+	Elseif ObjectInfo(Selection.obj,OBJ_INFO_TYPE) <> OBJ_TYPE_FRAME Then
+		Note "You must select a frame from the layout."
+		Exit Sub
+	Else
+		Fetch rec 1 from Selection
+		oFrame = aFrame
+		MapID = ObjectInfo(oFrame, OBJ_INFO_FRAMEWIN)
+
+		If WindowInfo(MapID, WIN_INFO_TYPE) = WIN_MAPPER and MapID <> 0 Then
+	
+			'* query the frame and get the x/y ratio
+			Set Coordsys Layout units "in"
+			LDeltaX = ObjectGeography(oFrame, OBJ_GEO_MAXX) - ObjectGeography(oFrame, OBJ_GEO_MINX)
+			LDeltaY = ObjectGeography(oFrame, OBJ_GEO_MAXY) - ObjectGeography(oFrame, OBJ_GEO_MINY)
+			LRatio = LDeltaX / LDeltaY
+	
+			'* get the current map height (we'll leave the height alone and
+			'*    adjust the width to get the correct ratio)
+			MapY = WindowInfo(MapId, WIN_INFO_HEIGHT)	
+			MapX = LRatio * MapY
+
+			'* set the map width
+			Set Window MapID Width MapX
+
+		Else
+			Note "You must select a frame containing a map."
+			Exit Sub
+		End If
+
+	End If
+
+'Log Action
+'  Open Table HomeDirectory$() + "LocalMILog.tab" as Log
+'  Insert Into Log
+'    Values (sMCUser, "Sync Frame", CurDate(), Time(24))
+'  Commit Table Log
+'  Close Table Log
+
+'  Exit Sub
+
+End Sub
+
+'**** Finds the Info Window *******
+Sub GetInfo
+
+  Open Window Info
+  Set Window Info Position (1,1)
+
+End Sub
+
+'**** EditWOR-Opens the workspace in Notepad for editing ****
+Sub EditWOR
+
+Dim sWOR as String
+
+  sWOR = FileOpenDlg("Q:\MapFiles","","*.WOR","Open WOR in Notepad")
+  Run Program "C:\WINDOWS\NOTEPAD.EXE " + sWOR
+
+End Sub
+
+'**** GetStats-Finds the Statistics Window ****
+Sub GetStats
+
+  Open Window Statistics
+  Set Window Statistics Position (1,1)
+
+End Sub
+
+'**** PreserveZoomScale-Toggles between zoom and scale preservation for mappers ****
+Sub PreserveZoomScale
+
+  If sPreserve = "Scale" Then
+   sPreserve = "Zoom"
+  Set Map Window FrontWindow() Preserve Zoom
+  Alter Menu Item ID 402 Text "Preserve Scale"
+  Else
+
+   sPreserve = "Scale"
+  Set Map Window FrontWindow() Preserve Scale
+  Alter Menu Item ID 402 Text "Preserve Zoom"
+  End If
+
+End Sub
+
+'**** FrameContents-Toggles between showing and hiding contents in a layout ****
+Sub FrameContents
+
+  If sOnOff = "On" Then
+   sOnOff = "Off"
+  Set Layout Window FrontWindow() Frame Contents Off
+  Alter Menu Item ID 401 Text "Contents On"
+  Else
+   sOnOff = "On"
+  Set Layout Window FrontWindow() Frame Contents Active
+  Alter Menu Item ID 401 Text "Contents Off"
+  End If
+
+End Sub
+
+'**** SinglePage-sets number of pages in a layout to one ****
+Sub SinglePage
+
+  Set Layout Extents (1,1)
+
+End Sub
+
+'**** MapSizer-sets the size of the mapper in real inches ****
+Sub MapSizer
+
+  Dim fHeight, fWidth as float
+
+  fHeight = WindowInfo(FrontWindow(), WIN_INFO_HEIGHT)
+  fWidth  = WindowInfo(FrontWindow(), WIN_INFO_WIDTH)
+
+  Dialog
+    Title "Map Sizer"
+    Control StaticText
+	Position 5, 10
+	Title "Height"
+    Control EditText
+      Position 35,9
+	Width 25
+	Height 11
+      Value Format$(fHeight, "#.##")
+      Into fHeight
+    Control StaticText
+	Position 65, 10
+	Title "inches"
+    Control StaticText
+	Position 5, 30
+	Title "Width"
+    Control EditText
+
+      Position 35,29
+	Width 25
+	Height 11
+      Value Format$(fWidth, "#.##")
+      Into fWidth
+    Control StaticText
+	Position 65, 30
+	Title "inches"
+    Control OKButton
+      Position 5,50    Control CancelButton
+    If CommandInfo(CMD_INFO_DLG_OK) Then
+      Set Window FrontWindow()
+        Position (0,0)
+        Height fHeight
+        Width fWidth
+    End If
+
+End Sub
+
+'**** WinTitler-changes the title for any window in the workspace ****
+Sub WinTitler
+
+Dim sWinTitle as String
+
+
+  If WindowInfo(FrontWindow(), WIN_INFO_TYPE) = 1 Then
+    sWinTitle = "M:"
+  End If
+  If WindowInfo(FrontWindow(), WIN_INFO_TYPE) = 2 Then
+    sWinTitle = "B:"
+  End If
+  If WindowInfo(FrontWindow(), WIN_INFO_TYPE) = 3 Then
+    sWinTitle = "L:"
+  End If
+
+  Dialog
+    Title "Window Title"
+    Control EditText
+      Position 5,5
+	   Width 150
+	   Height 11
+      Value sWinTitle
+      Into sWinTitle
+    Control OKButton
+    Control CancelButton
+
+    If CommandInfo(CMD_INFO_DLG_OK) Then
+      If sWinTitle <> "" Then
+        Set Window FrontWindow()
+          Title sWinTitle
+      End If
+    End If
+
+'Log Action
+  OnError Goto NotHere1
+  Close Table MainLog
+  BackToHere:
+  OnError Goto NotHere2
+  Close Table Log
+'  Open Table HomeDirectory$() + "LocalMILog.tab" as Log
+'  Insert Into Log
+'    Values (sMCUser, "Window Titler", CurDate(), Time(24))
+'  Commit Table Log
+'  Close Table Log
+  Exit Sub
+
+  NotHere1:
+  Resume BackToHere
+  NotHere2:
+  Resume EndIt
+
+  EndIt:
+
+End Sub
+
+'**** RecView-records the current view of the mapper ****
+Sub RecView
+
+  sZoom = MapperInfo(FrontWindow(),MAPPER_INFO_ZOOM)
+  sLon = MapperInfo(FrontWindow(),MAPPER_INFO_CENTERX)
+  sLat = MapperInfo(FrontWindow(),MAPPER_INFO_CENTERY)
+
+
+  If lRevMenu = FALSE Then
+   Alter Menu  "MapperShortcut"   Add
+       "Revert to View" ID 404 Calling ChngView
+   lRevMenu = TRUE
+  End If
+
+End Sub
+
+'**** ChngView-reverts to the saved view ****
+Sub ChngView
+
+  Set Map Window FrontWindow()
+    Center (sLon, sLat)
+    Zoom sZoom
+
+End Sub
+
+
+Sub DeleteObj
+
+ OnError Goto NoSel
+ Delete Object From Selection
+
+ NoSel:
+ Resume EndIt
+
+ EndIt:
+
+End Sub
+
+'**** WindowFinder-Opens a dialog box with windows sorted by type for ease of managing large workspaces ****
+Sub WindowFinder
+
+Dim iCount as Integer
+Dim sWinName as String
+Dim iMaps, iLayouts, iOther, iWinID as Integer
+
+Dim nwindows, nWindowId as Integer
+Dim x, y, z, p, idnum as Integer
+Dim iMap(), iLayout(), other() as String
+
+y = 1
+z = 1
+p = 1
+nWindows = numWindows()
+
+Create Table ViewSort (WinID Integer, Name Char(100)) 
+For x = 1 to nWindows
+Insert Into ViewSort
+	Values(x, WindowInfo(WindowID(x), WIN_INFO_NAME))
+Next
+Select * from ViewSort Order by Name
+For i=1 to nWindows
+    Fetch Rec i From Selection
+
+  
+ nWindowID = WindowInfo(WindowID(Selection.WinID), WIN_INFO_TYPE)
+  If nWindowID = WIN_MAPPER Then
+    ReDim iMap(y)
+    ReDim mapnum(y)
+    mapnum(y) = Selection.WinID
+    'iMap(y) = WindowInfo(WindowID(x), WIN_INFO_NAME)
+	 iMap(y) = Selection.Name
+    y = y+1
+  ElseIf nWindowID = WIN_LAYOUT Then
+    ReDim iLayout(z)
+    ReDim layoutnum(z)
+    layoutnum(z) = Selection.WinID
+    'iLayout(z) = WindowInfo(WindowID(x), WIN_INFO_NAME)
+	 iLayout(z) = Selection.Name
+    z = z+1
+  Else 
+    ReDim other(p)
+    ReDim othernum(p)
+    othernum(p) = Selection.WinID
+'    other(p) = WindowInfo(WindowID(x), WIN_INFO_NAME)
+	 other(p) = Selection.Name
+    p = p+1
+  End If
+Next
+Drop Table ViewSort
+  Dialog Title "Max Win: Now With Multiple Window Opening Capability!"
+   Control StaticText  Position 5,5   Title  "Maps"
+   Control MultiListBox
+     Position 5,15 Width 180 Height 100
+     ID 101
+     Title From Variable iMap
+     Value 0
+
+   Control StaticText  Position 190,5   Title  "Layouts"
+   Control MultiListBox
+     Position 190,15 Width 180 Height 100
+     ID 102
+     Title From Variable iLayout
+     Value 0
+
+   Control StaticText  Position 375,5   Title  "Other"
+   Control MultiListBox
+     Position 375,15 Width 180 Height 100
+     ID 103
+     Title From Variable other
+     Value 0
+
+   Control CancelButton
+     Position 350,120
+   Control OKButton
+     ID 110
+     Calling OpenWindows
+  
+  ReDim iMap(0)
+  ReDim iLayout(0)
+  ReDim other(0) 
+End Sub
+
+'**** OpenWindows-Sub-procedure for WindowFinder that opens the selected windows ****
+Sub OpenWindows
+
+ Dim listnum, z as Integer
+
+  listnum = ReadControlValue(101)
+
+  Do While listnum > 0
+    z = mapnum(listnum)
+    Set Window WindowID(z) Restore Front
+    listnum = ReadControlValue(101)
+  Loop
+
+  listnum = ReadControlValue(102)
+  
+  Do While listnum > 0
+    z = layoutnum(listnum)
+    Set Window WindowID(z) Restore Front
+    listnum = ReadControlValue(102)
+  Loop
+
+  listnum = ReadControlValue(103) 
+
+  Do While listnum > 0
+    z = othernum(listnum)
+    Set Window WindowID(z) Restore Front
+    listnum = ReadControlValue(103)
+  Loop
+
+ ReDim layoutnum(0)
+ ReDim mapnum(0)
+ ReDim othernum(0)
+end Sub
+
+'**** WinMinimizer-Minimizes all windows in a workspace ****
+Sub WinMinimizer
+
+ Dim nWindows, j as Integer
+
+  nWindows = numWindows()
+
+  For j = 1 to nWindows
+    Set Window WindowID(j) Min
+  Next
+
+end Sub
+
+'**** AboutApp-Gives version info for this tool ****
+Sub AboutApp
+  Dim sAppName, sVerNum, sFirstDate As String
+  Dim iStrLen As SmallInt
+
+  sAppName = "MI Tools EC Compilation"
+  sVerNum = "4.0"
+  sFirstDate = "04/03/2007"
+
+  If Len(sAppName) < 30 Then
+    iStrLen = 156
+  Else
+    iStrLen = Len(sAppName) * 5
+  End If
+
+  Dialog Title "About " + sAppName
+    Control GroupBox    Position 8,8    Width iStrLen Height 16
+    Control StaticText  Position 12,14  Title sAppName + " Version " + sVerNum
+
+    Control StaticText  Position 12,36   Title "Tools for MapInfo"
+    Control StaticText  Position 12,48   Title "Compiled from tools from"
+    Control StaticText  Position 12,60   Title "various authors including"
+    Control StaticText  Position 12,72   Title "William S. Landis, Chris Macy,"
+    Control StaticText  Position 12,84   Title "Jerry McCahan, Erin Comparri"
+
+    Control StaticText  Position 12,82   Title Chr$(169)+" " + sFirstDate + " - Erin Comparri"
+    Control StaticText  Position 12,94   Title "All rights reserved."
+
+    Control OKButton
+End Sub
+
+'**** ScaleIt-Opens a premade scalebar for use in the layout ****
+Sub ScaleIt
+
+Dim iScaleBar, iRowCnt, x, iScale as Integer
+Dim sScale(), sFileName as String
+
+  Open Table "<removed>" as Scalebar
+  iRowCnt = TableInfo(Scalebar, TAB_INFO_NROWS)
+  ReDim sScale(iRowCnt)
+  For x = 1 to iRowCnt
+  Fetch Rec x From Scalebar
+  sScale(x) = Scalebar.Scale
+  Next
+
+  Dialog Title "Select Scale"
+   Control ListBox
+     Position 5,5 Width 75 Height 100
+     Title From Variable sScale
+     Value 0
+     Into iScale
+   Control OKButton
+   Control CancelButton
+
+   If CommandInfo(CMD_INFO_DLG_OK) Then
+    If iScale <> 0 Then
+     Fetch Rec iScale From Scalebar
+     sFileName = Scalebar.File  
+     Open Table "<removed>" + sFileName
+     Close Table Scalebar
+     sFileName = Left$(sFileName, Len(sFileName)-4)
+     Map From sFileName
+     Position (1,1)
+     Width 3.0
+     Height 1.0
+     Set Map Window FrontWindow() Zoom Entire 
+     Set Window FrontWindow() ScrollBars Off 
+     Set Window FrontWindow() Autoscroll Off
+     Set Window FrontWindow() Title "S:"+sScale(iScale)
+     Set Window FrontWindow() Min
+    End If
+   End If
+ ReDim sScale(0)
+End Sub
+
+'**** WinRecenter-Recenters a window based on a selected point **** 
+Sub WinRecenter
+Dim Map_ID as Integer
+Dim x, y as Float
+
+'* make sure a map is the active window
+	If Not FrontWindow() Then
+		Note "You must have a map window active."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "You must have a map window active."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Else
+		Map_ID = FrontWindow()
+	End If
+
+'* make sure there is only one object selected
+'* store the x and y coords for the selected object
+  If SelectionInfo(SEL_INFO_NROWS) < 1 Then
+		Note "You must select an object to center on"
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+  ElseIf SelectionInfo(SEL_INFO_NROWS) > 1 Then
+		Note "You must select only one object to center on"
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+  Else 
+		Fetch First from Selection
+		x = CentroidX(Selection.obj)
+		y = CentroidY(Selection.obj)
+  End If
+'* recenter the map window based on the coords of selected object
+  Set Map Window Map_ID Center (x,y)
+end Sub
+
+sub ripMe()
+
+			Alter MapInfoDialog 3475
+			Control 18 Value i
+
+end sub
+
+Sub LayoutCloner
+Dim i_map_id as integer
+Dim LayoutTitle as String
+
+LayoutTitle = "Copy of "
+i_map_id = FrontWindow()
+LayoutTitle = LayoutTitle + WindowInfo (i_map_id, WIN_INFO_NAME) 
+Run Command  WindowInfo(i_map_id, WIN_INFO_CLONEWINDOW)
+Set Window FrontWindow()
+          Title LayoutTitle
+End Sub

@@ -1,0 +1,143 @@
+'**************
+'Object Recenter
+'This tool recenters polygons based on a user defined point
+' Copyright (right!) 2006 Erin Comparri
+' 31 July 2006
+'**************
+
+Include "mapbasic.def"
+Include "icons.def"
+
+Declare Sub Main
+Declare Sub obj_recenter
+Declare Sub move_obj
+Declare Sub region_maker
+Declare Sub obj_surv
+
+Dim i, Map_Id, SelNum as Integer
+Dim x, y as Float
+Dim Table_Name as String
+Dim Targ_obj as Object
+
+sub Main
+ Alter menu ID 17 Add "Object Recenter" ID 1171 calling "obj_recenter"
+
+end Sub
+
+sub obj_recenter
+
+'* make sure a map is the active window
+	If Not FrontWindow() Then
+		Note "You must have a map window active."
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "You must have a map window active."
+		Exit Sub
+	Else
+		Map_Id = FrontWindow()
+	End If
+
+'* make sure there is only one object selected
+'* store the x and y coords for the selected object
+  If SelectionInfo(SEL_INFO_NROWS) < 1 Then
+		Note "You must select a point to center on"
+		Exit Sub
+  ElseIf SelectionInfo(SEL_INFO_NROWS) > 1 Then
+		Note "You must select only one object to center on"
+		Exit Sub
+  Else 
+		Fetch First from Selection
+		Targ_obj = Selection.obj
+		If ObjectInfo(Targ_obj, OBJ_INFO_TYPE) <> OBJ_TYPE_POINT Then
+			Note "You must select a point to center on"
+			Exit Sub
+		Else
+		  x = CentroidX(Targ_obj)
+		  y = CentroidY(Targ_obj)
+		End If
+  End If
+'* prompt user to select objects to move
+  Note "Click OK and Select the objects you want to move. Then Press the Nifty Mug"
+  Create ButtonPad "Move-o-Matic" As
+		PushButton
+	      		Icon 162
+			ID 1181
+			helpmsg "Select objects to recenter\nRecenter Objects"
+			calling obj_surv
+		show
+		Float
+		Position (2, 2) Units "in"
+ Alter menu ID 17 Remove ID 1171
+end Sub
+
+sub obj_surv
+  Dim Obj_type as Integer
+ 
+  Alter menu ID 17 Remove ID 1171
+  Alter ButtonPad "Move-o-Matic"
+		Fixed
+  Alter ButtonPad "Move-o-Matic"
+		Destroy
+  
+'* survey selection 
+  Table_Name = SelectionInfo(SEL_INFO_TABLENAME)
+  SelNum = SelectionInfo(SEL_INFO_NROWS)
+'* move each object in selection
+  For i=1 to SelNum
+    Fetch Rec i From Selection
+    Obj_type = ObjectInfo(Selection.obj, OBJ_INFO_TYPE)
+    If Obj_Type = OBJ_TYPE_REGION	Then
+	  Call move_obj
+    ElseIf Obj_type = OBJ_TYPE_ELLIPSE	Then 
+	  Call region_maker
+    ElseIf Obj_type = OBJ_TYPE_RECT	Then 
+	  Call region_maker
+    ElseIf Obj_type = OBJ_TYPE_ROUNDRECT	Then 
+	  Call region_maker
+    Else 
+	  Note "This tool moves polygons only"
+    End If
+  Next
+ 
+Alter menu ID 17 Add "Object Recenter" ID 1171 calling "obj_recenter"
+
+end sub
+
+sub move_obj
+
+  Dim j, numNode, numPoly, Obj_type as Integer
+  Dim Mover as Object
+  Dim ObjCtr as Object
+  Dim x_cent, y_cent, DeltaX, DeltaY, nodeX, nodeY as Float
+
+   Mover = Selection.obj
+   Update Selection Set Obj = ConvertToPline(Mover) Where Rowid = i
+   Update Selection Set Obj = ConvertToRegion(Mover) Where Rowid = i
+   ObjCtr = Centroid(Mover)
+   numNode = ObjectInfo(Mover, 20)
+   numPoly = ObjectInfo(Mover, OBJ_INFO_NPOLYGONS)
+   x_cent = CentroidX(ObjCtr)
+   y_cent = CentroidY(ObjCtr)
+   DeltaX = x - x_cent
+   DeltaY = y - y_cent
+	
+   For j=1 to numNode - 1
+    nodeX = ObjectNodeX(Mover, 1, j)
+    nodeY = ObjectNodeY(Mover, 1, j)
+    Alter Object Mover Node Set Position 1, j (nodeX + DeltaX, nodeY + DeltaY)
+   Next
+   Update Selection Set Obj = Mover Where Rowid = i
+   Update Selection Set Obj = ConvertToPline(Mover) Where Rowid = i
+   'Update Selection Set Obj = ConvertToRegion(Mover) Where Rowid = i
+   Run Menu Command 1607
+end sub
+
+sub region_maker
+  Dim Poly as Object
+	Poly = Selection.obj
+  Update Selection Set Obj = ConverttoRegion(Poly) Where Rowid = i	
+  Call move_obj
+end sub
+
+
+

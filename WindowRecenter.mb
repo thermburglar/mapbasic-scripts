@@ -1,0 +1,59 @@
+'**************
+'Window Re-Center
+'This is a tool that recenters the current map window on a selected point
+' Copyright (right!) 2006 Erin Comparri
+' 27 July 2006
+'**************
+
+Include "mapbasic.def"
+Include "icons.def"
+
+Declare Sub Main
+Declare Sub recenter
+
+sub Main
+ Alter menu ID 17 Add "Recenter Window" calling "recenter"
+
+end Sub
+
+sub recenter
+Dim Map_ID as Integer
+Dim x, y as Float
+
+'* make sure a map is the active window
+	If Not FrontWindow() Then
+		Note "You must have a map window active."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Elseif WindowInfo(FrontWindow(), WIN_INFO_TYPE) <> WIN_MAPPER Then
+		Note "You must have a map window active."
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+	Else
+		Map_ID = FrontWindow()
+	End If
+
+'* make sure there is only one object selected
+'* store the x and y coords for the selected object
+  If SelectionInfo(SEL_INFO_NROWS) < 1 Then
+		Note "You must select an object to center on"
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+  ElseIf SelectionInfo(SEL_INFO_NROWS) > 1 Then
+		Note "You must select only one object to center on"
+		Alter Button ID 1001 Uncheck
+		Exit Sub
+  Else 
+		Fetch First from Selection
+		x = CentroidX(Selection.obj)
+		y = CentroidY(Selection.obj)
+  End If
+'* recenter the map window based on the coords of selected object
+  Set Map Window Map_ID Center (x,y)
+end Sub
+
+
+
+
+
+

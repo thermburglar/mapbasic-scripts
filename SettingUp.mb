@@ -1,0 +1,26 @@
+'*******************************************************************************************************************************
+'*  Program: 
+'*  Purpose:
+'*  Date: 
+'*******************************************************************************************************************************
+
+Declare Sub GUIMaker
+Declare Sub ViewMarketPlan
+Declare Sub Instructions
+
+
+'*******************************************************************************************************************************
+'*  Sub: GUIMaker
+'*  Purpose: Clean up extra menus that the user does not need and create GUI.
+'*******************************************************************************************************************************
+Sub GUIMaker
+
+  Alter Menu Bar Add "Market Plan" 
+
+  Alter Menu  "Market Plan"  Add
+	  "View" Calling ViewMarketPlan
+'	  "User Guide"  Calling Instructions
+
+	  
+End Sub
+
