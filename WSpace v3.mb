@@ -134,7 +134,7 @@ Set Window FrontWindow() Min
 Set Window FrontWindow() Title "Market Plan Legend"
 
 
-Map From BR_logo
+Map From store_logo
   Position (0.46875,0.53125) Units "in"
   Width 5.29167 Units "in" Height 3.10417 Units "in" Min
 Set Window FrontWindow() ScrollBars Off Autoscroll On
